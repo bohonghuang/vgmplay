@@ -1,0 +1,7 @@
+#+TITLE: VGMPlay
+[[file:screenshot.gif]]
+* Usage
+1. Download released binary or compile from source using ASDF. For those dependencies that miss in Quicklisp,
+   you may find them in my repositories.
+2. Create a directory named "ROM" under where you launch the program and place your ROM into it.
+3. Open the ROM in the program, and enjoy the high-quality audio playback for the ROM.
