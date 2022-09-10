@@ -120,10 +120,6 @@
           (incf pos-y 40)
           (draw-text "v1.0.0" (+ pos-x 65) pos-y 20 border-color)
           (incf pos-y 40)
-          ;; (setf rom-combo-box-index
-          ;;       (gui-combo-box (make-rectangle :x pos-x :y pos-y :width 100 :height 25)
-          ;;                      "rodddddddm.gba;bbb.gba;ccc.gba"
-          ;;                      rom-combo-box-index))
           (when (gui-button (make-rectangle :x pos-x :y pos-y :width 100 :height 25)
                             (gui-icon-text 5 "Open"))
             (setf open-file-list (directory (merge-pathnames "*.gba" (ensure-directories-exist "ROM/"))))
