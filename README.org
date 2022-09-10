@@ -1,7 +1,14 @@
 #+TITLE: VGMPlay
 [[file:screenshot.gif]]
+* Dependencies
+- [[https://github.com/BohongHuang/cl-agbplay][cl-agbplay]]
+- [[https://github.com/natefusion/cl-raygui][cl-raygui]] (requires ~libraygui~ installed in your system)
+- [[https://github.com/longlene/cl-raylib][cl-raylib]] (requires ~libraylib~ installed in your system)
+- [[https://github.com/Frechmatz/cl-wave-file-writer][cl-wave-file-writer]]
+For those dependencies miss in Quicklisp, you might clone them into ~local-projects~ under your Quicklisp installation folder.
 * Usage
-1. Download released binary or compile from source using ASDF. For those dependencies that miss in Quicklisp,
-   you may find them in my repositories.
+1. Download released binary or compile from source using ASDF. On GNU/Linux,
+   it's required to have ~libraylib~ and ~libraygui~ installed in your system. So if you want to use the released binary without building anything yourself,
+   it's recommended to download the Windows version release and run it on Wine. 
 2. Create a directory named "ROM" under where you launch the program and place your ROM into it.
 3. Open the ROM in the program, and enjoy the high-quality audio playback for the ROM.
