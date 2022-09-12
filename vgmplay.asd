@@ -14,6 +14,6 @@
   :serial t
   :build-operation program-op
   :build-pathname "vgmplay"
-  :entry-point "vgmplay:main"
+  :entry-point "vgmplay:run-application"
   :components ((:file "vgmplay"))
   :depends-on (#:asdf #:alexandria #:cl-agbplay #:cl-agbplay.cffi #:cl-raylib #:cl-raygui #:cl-wave-file-writer))

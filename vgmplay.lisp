@@ -17,7 +17,7 @@
 
 (defpackage vgmplay
   (:use #:cl #:alexandria #:agbplay #:raylib #:raygui #:cffi #:bordeaux-threads)
-  (:export #:main))
+  (:export #:run-application))
 
 (in-package #:agbplay)
 
@@ -57,6 +57,8 @@
 (in-package #:vgmplay)
 
 (defconstant +buffer-size+ 2048)
+(defconstant +window-width+ 800)
+(defconstant +window-height+ 480)
 
 (defmacro foreign-pointer-let ((&rest bindings) &body body)
   (labels ((recur (bindings)
@@ -73,10 +75,11 @@
                  `(progn ,@body))))
     (recur bindings)))
 
-(defun draw-notes (pos-x pos-y note-vector key-width key-height border-width border-color)
+(defun draw-notes (pos-x pos-y note-vector key-width key-height border-width border-color &optional prev-note-vector)
   (declare (optimize (speed 3))
            (type (signed-byte 32) pos-x pos-y key-width key-height border-width)
-           (type (simple-array bit) note-vector))
+           (type (simple-array bit) note-vector)
+           (type (or (simple-array bit) null) prev-note-vector))
   (flet ((white-key-p (note)
            (declare (type (unsigned-byte 8) note))
            (setf note (mod note 12))
@@ -88,17 +91,23 @@
                                                                                (loop :for i :below (length note-vector)
                                                                                      :count (white-key-p i))))))
           (background-height (+ key-height (* border-width 2))))
-      (draw-rectangle pos-x pos-y background-width background-height border-color)
+      (unless prev-note-vector (draw-rectangle pos-x pos-y background-width background-height border-color))
       (let ((key-alist (loop :with draw-y :of-type (signed-byte 32) := border-width
-                             :for note :of-type bit :across note-vector
-                             :for i :from 0
+                             :for i :below 128
                              :for draw-x :of-type (signed-byte 32) := border-width :then (+ draw-x (if (eql (white-key-p i) (white-key-p (1- i)))
                                                                                                        (+ border-width key-width)
                                                                                                        (truncate (+ border-width key-width) 2)))
-                             :collect (let ((white-key-p (white-key-p i)))
-                                        (list white-key-p (+ pos-x draw-x) (+ pos-y draw-y)
+                             :for white-key-p := (white-key-p i)
+                             :when (or (not prev-note-vector)
+                                       (/= (aref prev-note-vector i) (aref note-vector i))
+                                       (and (not white-key-p)
+                                            (or (/= (aref prev-note-vector (1+ i)) (aref note-vector (1+ i)))
+                                                (/= (aref prev-note-vector (1- i)) (aref note-vector (1- i))))))
+                               :collect (list white-key-p
+                                              (+ pos-x draw-x) (+ pos-y draw-y)
                                               key-width (if white-key-p key-height (truncate key-height 2))
-                                              (if (zerop note) (if white-key-p +white+ +black+) +red+))))))
+                                              (if (zerop (aref note-vector i)) (if white-key-p +white+ +black+) +red+)))))
+        (when prev-note-vector (replace prev-note-vector note-vector))
         (loop :for (white-key-p . draw-rectangle-args) :in key-alist
               :when white-key-p
                 :do (apply #'draw-rectangle draw-rectangle-args))
@@ -108,7 +117,10 @@
         (values background-width background-height)))))
 
 (defun main-loop ()
-  (declare (special player song-id song-id-spinner-edit-p rom-combo-box-index export-thread show-open-file-window-p open-file-list-scroll-index open-file-list-select-index open-file-list current-file export-max-loop-count export-muted-track-p export-all-p show-export-window-p export-progress export-max-loop-count-edit-p))
+  (declare (special player song-id song-id-spinner-edit-p rom-combo-box-index export-thread show-open-file-window-p open-file-list-scroll-index
+                    open-file-list-select-index open-file-list current-file export-max-loop-count export-muted-track-p
+                    export-all-p show-export-window-p export-progress export-max-loop-count-edit-p
+                    notes-render-texture note-vectors))
   (let ((border-color (get-color (agbplay::signed->unsigned/bits (gui-get-style +default+ +border-color-normal+) 32))))
     (with-drawing
       (clear-background +raywhite+)
@@ -118,7 +130,7 @@
         (block player-widget
           (draw-text "VGMPlay" (- pos-x 15) pos-y 30 border-color)
           (incf pos-y 40)
-          (draw-text "v1.0.0" (+ pos-x 65) pos-y 20 border-color)
+          (draw-text "v1.0.1" (+ pos-x 65) pos-y 20 border-color)
           (incf pos-y 40)
           (when (gui-button (make-rectangle :x pos-x :y pos-y :width 100 :height 25)
                             (gui-icon-text 5 "Open"))
@@ -127,11 +139,14 @@
           (incf pos-y 30)
           (unless player (return-from player-widget nil))
           (foreign-pointer-let ((value :int song-id))
-            (when (gui-spinner (make-rectangle :x pos-x :y pos-y :width 100 :height 25) "No." value& 0 (1- (agbplayer-number-songs player)) (if song-id-spinner-edit-p 1 0))
-              (unless (setf song-id-spinner-edit-p (not song-id-spinner-edit-p))
-                (agbplayer-set-song player (setf value (clamp value 0 (1- (agbplayer-number-songs player)))))))
-            (unless (or song-id-spinner-edit-p (= song-id value))
-              (agbplayer-set-song player (setf value (clamp value 0 (1- (agbplayer-number-songs player)))))))
+            (flet ((switch-song ()
+                     (agbplayer-set-song player (setf value (clamp value 0 (1- (agbplayer-number-songs player)))))
+                     (setf (fill-pointer note-vectors) 0)))
+              (when (gui-spinner (make-rectangle :x pos-x :y pos-y :width 100 :height 25) "No." value& 0 (1- (agbplayer-number-songs player)) (if song-id-spinner-edit-p 1 0))
+                (unless (setf song-id-spinner-edit-p (not song-id-spinner-edit-p))
+                  (switch-song)))
+              (unless (or song-id-spinner-edit-p (= song-id value))
+                (switch-song))))
           (incf pos-y 30)
           (when (gui-button (make-rectangle :x pos-x :y pos-y :width 100 :height 25)
                             (if (or (not (agbplayer-playing-p player)) (agbplayer-paused-p player)) (gui-icon-text 131 "Play") (gui-icon-text 132 "Pause")))
@@ -158,6 +173,9 @@
               (key-border 2)
               (pos-x 4)
               (pos-y 8))
+          (when (zerop (length note-vectors))
+            (with-texture-mode (notes-render-texture)
+              (clear-background +blank+)))
           (loop :for track :across (agbplay::sequence-tracks
                                     (agbplay::player-context-sequence
                                      (agbplay::player-context
@@ -176,10 +194,14 @@
                               (not (agbplay::player-track-mute-p (agbplay::agbplayer-player player) track-index))))
                       (gui-set-state +gui-state-normal+)
                       (let ((pos-x (+ (+ pos-x 32)
-                                      (draw-notes notes-x pos-y
-                                                  (agbplay::track-active-notes track)
-                                                  key-width key-height key-border
-                                                  border-color)))
+                                      (with-texture-mode (notes-render-texture)
+                                        (draw-notes notes-x pos-y
+                                                    (agbplay::track-active-notes track)
+                                                    key-width key-height key-border
+                                                    border-color
+                                                    (if (< track-index (length note-vectors))
+                                                        (aref note-vectors track-index)
+                                                        (prog1 nil (vector-push-extend (copy-array (agbplay::track-active-notes track)) note-vectors)))))))
                             (loud-l (agbplay::loudness-calculator-volume-left loudness))
                             (loud-r (agbplay::loudness-calculator-volume-right loudness))
                             (max-height (+ key-height (* key-border 2)))
@@ -193,7 +215,10 @@
                           (draw-rectangle (+ pos-x width) (- (+ pos-y max-height) height-r) width height-r (cond
                                                                                                              ((<= height-r (truncate max-height 2)) +green+)
                                                                                                              ((<= height-r (* 3 (truncate max-height 4))) +orange+)
-                                                                                                             (t +red+))))))))
+                                                                                                             (t +red+)))))))
+          (draw-texture-rec (render-texture-texture notes-render-texture)
+                            (make-rectangle :x 0 :y +window-height+ :width +window-width+ :height (- +window-height+))
+                            (make-vector2 :x 0 :y 0) +white+))
         (let ((loud-l (agbplay::loudness-calculator-volume-left (agbplay::player-master-loudness (agbplay::agbplayer-player player))))
               (loud-r (agbplay::loudness-calculator-volume-right (agbplay::player-master-loudness (agbplay::agbplayer-player player))))
               (max-width 400)
@@ -223,11 +248,14 @@
                                           ""
                                           "Open;Cancel"))
                   (0 t)
-                  (1 (when (not (minusp open-file-list-select-index))
-                       (when player (agbplayer-stop player))
-                       (setf song-id 0)
-                       (setf player (make-agbplayer (setf current-file (nth open-file-list-select-index open-file-list))
-                                                    :sample-buffer-size (* +buffer-size+ 2)))))
+                  (1 (handler-case
+                         (when (not (minusp open-file-list-select-index))
+                           (when player (agbplayer-stop player))
+                           (setf player (make-agbplayer (setf current-file (nth open-file-list-select-index open-file-list))
+                                                        :sample-buffer-size (* +buffer-size+ 2)))
+                           (setf song-id 0)
+                           (setf (fill-pointer note-vectors) 0))
+                       (error nil)))
                   (2 t))
             (setf show-open-file-window-p nil))
           (foreign-pointer-let ((scroll-index :int open-file-list-scroll-index))
@@ -304,9 +332,7 @@
           (incf pos-y 20))))))
 
 (defun main ()
-  #+sbcl
-  (sb-ext:disable-debugger)
-  (with-window (800 480 "VGMPlay")
+  (with-window (+window-width+ +window-height+ "VGMPlay")
     (let* ((player nil)
            (buffer (make-shareable-byte-vector (* +buffer-size+ 4 2)))
            (show-open-file-window-p nil)
@@ -323,8 +349,13 @@
            (export-progress (cons 0 0))
            (export-all-p nil)
            (export-muted-track-p nil)
-           (rom-combo-box-index 0))
-      (declare (special player song-id song-count song-id-spinner-edit-p rom-combo-box-index export-thread open-file-list show-open-file-window-p open-file-list-scroll-index open-file-list-select-index current-file export-max-loop-count export-muted-track-p export-all-p show-export-window-p export-max-loop-count-edit-p export-progress))
+           (rom-combo-box-index 0)
+           (notes-render-texture (load-render-texture +window-width+ +window-height+))
+           (note-vectors (make-array 0 :fill-pointer 0 :adjustable t :element-type 'bit-vector)))
+      (declare (special player song-id song-count song-id-spinner-edit-p rom-combo-box-index export-thread open-file-list
+                        show-open-file-window-p open-file-list-scroll-index open-file-list-select-index current-file export-max-loop-count
+                        export-muted-track-p export-all-p show-export-window-p export-max-loop-count-edit-p export-progress
+                        notes-render-texture note-vectors))
       (set-target-fps 60)
       (set-audio-stream-buffer-size-default +buffer-size+)
       (with-audio-device
@@ -346,3 +377,8 @@
             (when (thread-alive-p export-thread)
               (destroy-thread export-thread))
             (stop-audio-stream stream)))))))
+
+(defun run-application ()
+  #+sbcl
+  (sb-ext:disable-debugger)
+  (main))
