@@ -218,7 +218,7 @@
                                                                                                              (t +red+)))))))
           (draw-texture-rec (render-texture-texture notes-render-texture)
                             (make-rectangle :x 0 :y +window-height+ :width +window-width+ :height (- +window-height+))
-                            (make-vector2 :x 0 :y 0) +white+))
+                            (3d-vectors:vec2 0 0) +white+))
         (let ((loud-l (agbplay::loudness-calculator-volume-left (agbplay::player-master-loudness (agbplay::agbplayer-player player))))
               (loud-r (agbplay::loudness-calculator-volume-right (agbplay::player-master-loudness (agbplay::agbplayer-player player))))
               (max-width 400)
@@ -379,6 +379,4 @@
             (stop-audio-stream stream)))))))
 
 (defun run-application ()
-  #+sbcl
-  (sb-ext:disable-debugger)
   (main))
