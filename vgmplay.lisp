@@ -24,35 +24,26 @@
 (defun export-wave (rom positions loop-count muted-tracks filename &optional notify-function)
   (loop :for (song-name . position) :in positions
         :for position-index :from 0
-        :do (let* ((context (make-player-context :rom rom :config (make-config :max-loops loop-count)))
-                   (*player-context* context)
-                   (track-audio (make-vector 0 :element-type '(vector sample)))
-                   (writer (cl-wave-file-writer:make-writer :filename (merge-pathnames (format nil "~A.wav" song-name) (ensure-directories-exist (merge-pathnames (format nil "~A/" filename) (ensure-directories-exist "Export/"))))
-                                                            :channel-count 2
-                                                            :sample-width :16bit
-                                                            :sample-rate 48000))
-                   (open-file (getf writer :open-file))
-                   (write-sample (getf writer :write-sample))
-                   (close-file (getf writer :close-file)))
-              (funcall (or notify-function #'identity) (/ position-index (length positions)))
+        :do (let* ((context (make-player-context :rom rom :config (make-config :max-loops loop-count))))
+              (funcall (or notify-function #'identity) (/ position-index (length positions))) 
               (player-context-init-song context position)
-              (funcall open-file)
-              (let ((samples-per-buffer (sound-mixer-samples-per-buffer (player-context-sound-mixer context))))
-                (loop (progn
-                        (setf track-audio (player-context-process context track-audio))
-                        (when (player-context-end-p context)
-                          (return))
-                        (loop :for i :below samples-per-buffer
-                              :do (let ((left 0.0)
-                                        (right 0.0))
-                                    (loop :for track :across track-audio
+              (cl-wave-file-writer:with-writer (write-sample ((merge-pathnames (format nil "~A.wav" song-name) (ensure-directories-exist (merge-pathnames (format nil "~A/" filename) (ensure-directories-exist "Export/"))))
+                                                              :channel-count 2
+                                                              :sample-width-bits 16
+                                                              :sample-rate 48000))
+                (loop :with samples-per-buffer := (sound-mixer-samples-per-buffer (player-context-sound-mixer context))
+                      :with track-audio := (make-vector 0 :element-type '(vector sample))
+                      :do (setf track-audio (player-context-process context track-audio))
+                      :until (player-context-end-p context)
+                      :do (loop :for i :below samples-per-buffer
+                                :for left := 0.0 :and right := 0.0
+                                :do (loop :for track :across track-audio
                                           :for muted-p :across muted-tracks
                                           :unless muted-p
                                             :do (incf left (sample-left (aref track i)))
                                                 (incf right (sample-right (aref track i))))
-                                    (funcall write-sample left)
-                                    (funcall write-sample right))))))
-              (funcall close-file))))
+                                    (write-sample left)
+                                    (write-sample right)))))))
 
 (in-package #:vgmplay)
 
@@ -116,6 +107,7 @@
                 :do (apply #'draw-rectangle draw-rectangle-args))
         (values background-width background-height)))))
 
+(declaim (inline main-loop))
 (defun main-loop ()
   (declare (special player song-id song-id-spinner-edit-p rom-combo-box-index export-thread show-open-file-window-p open-file-list-scroll-index
                     open-file-list-select-index open-file-list current-file export-max-loop-count export-muted-track-p
