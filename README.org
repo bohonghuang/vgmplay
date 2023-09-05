@@ -2,8 +2,7 @@
 [[file:screenshot.gif]]
 * Dependencies
 - [[https://github.com/BohongHuang/cl-agbplay][cl-agbplay]]
-- [[https://github.com/natefusion/cl-raygui][cl-raygui]] (requires ~libraygui~ installed in your system)
-- [[https://github.com/longlene/cl-raylib][cl-raylib]] (requires ~libraylib~ installed in your system)
+- [[https://github.com/bohonghuang/claw-raylib][claw-raylib]] (requires ~libraylib~ installed in your system)
 - [[https://github.com/Frechmatz/cl-wave-file-writer][cl-wave-file-writer]]
 For those dependencies miss in Quicklisp, you might clone them into ~local-projects~ under your Quicklisp installation folder.
 * Usage
