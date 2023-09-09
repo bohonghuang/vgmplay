@@ -16,7 +16,7 @@
 ;;;; along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 (defpackage vgmplay
-  (:use #:cl #:alexandria #:agbplay #:cffi)
+  (:use #:cl #:alexandria #:agbplay #:cffi #:cffi-ops)
   (:export #:main))
 
 (in-package #:agbplay)
@@ -60,7 +60,10 @@
                      `(with-foreign-pointer (,pointer (foreign-type-size ,type))
                         (setf (mem-ref ,pointer ,type) ,var)
                         (symbol-macrolet ((,varname (mem-ref ,pointer ,type))
-                                          (,(symbolicate varname '#:&) ,pointer))
+                                          (,(symbolicate varname '#:&) (cobj:pointer-cpointer
+                                                                        ,pointer
+                                                                        ',(cobj::cobject-class-definition-class
+                                                                           (cobj::find-cobject-class-definition (cffi::ensure-parsed-base-type :int))))))
                           ,(recur (cdr bindings)))
                         (setf ,var (mem-ref ,pointer ,type)))))
                  `(progn ,@body))))
@@ -409,7 +412,7 @@
                              (with-pointer-to-vector-data (buffer-pointer buffer)
                                (when (and player (raylib:is-audio-stream-processed stream))
                                  (agbplayer-take-buffer-into-pointer player buffer-pointer +buffer-size+)
-                                 (raylib:update-audio-stream stream buffer-pointer +buffer-size+)))
+                                 (raylib:%update-audio-stream (& stream) buffer-pointer +buffer-size+)))
                              (main-loop))))
             (when player
               (agbplayer-stop player)
