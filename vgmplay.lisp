@@ -47,7 +47,7 @@
 
 (in-package #:vgmplay)
 
-(defconstant +buffer-size+ 2048)
+(defconstant +buffer-size+ 1600)
 (defconstant +window-width+ 800)
 (defconstant +window-height+ 480)
 
@@ -286,14 +286,12 @@
                   (padding-bottom 48))
               (when (switch ((raygui:message-box window-rect "Open File" "" "Open;Cancel"))
                       (0 t)
-                      (1 (handler-case
-                             (when (not (minusp open-file-list-select-index))
-                               (when player (agbplayer-stop player))
-                               (setf player (make-agbplayer :rom (setf current-file (nth open-file-list-select-index open-file-list))
-                                                            :sample-buffer-size (* +buffer-size+ 2)))
-                               (setf song-id 0)
-                               (setf (fill-pointer note-vectors) 0))
-                           (error nil)))
+                      (1 (ignore-errors
+                          (when (not (minusp open-file-list-select-index))
+                            (when player (agbplayer-stop player))
+                            (setf player (make-agbplayer :rom (setf current-file (nth open-file-list-select-index open-file-list))))
+                            (setf song-id 0)
+                            (setf (fill-pointer note-vectors) 0))))
                       (2 t))
                 (setf show-open-file-window-p nil))
               (foreign-pointer-let ((scroll-index :int open-file-list-scroll-index))
@@ -411,12 +409,12 @@
                        :do (progn
                              (with-pointer-to-vector-data (buffer-pointer buffer)
                                (when (and player (raylib:is-audio-stream-processed stream))
-                                 (agbplayer-take-buffer-into-pointer player buffer-pointer +buffer-size+)
+                                 (agbplayer-take-sample-buffer-into-pointer player buffer-pointer +buffer-size+)
                                  (raylib:%update-audio-stream (& stream) buffer-pointer +buffer-size+)))
                              (main-loop))))
             (when player
               (agbplayer-stop player)
-              (agbplayer-take-buffer-into-byte-vector player buffer +buffer-size+))
+              (agbplayer-take-sample-buffer-into-byte-vector player buffer +buffer-size+))
             (when (bt2:thread-alive-p export-thread)
               (bt2:destroy-thread export-thread))
             (raylib:stop-audio-stream stream)))))))
